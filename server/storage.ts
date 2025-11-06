@@ -1,37 +1,44 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { type UninstallRequest } from "@shared/schema";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  incrementUninstallCount(programName: string): Promise<UninstallRequest>;
+  getAllUninstallRequests(): Promise<UninstallRequest[]>;
+  getUninstallRequest(programName: string): Promise<UninstallRequest | undefined>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+  private requests: Map<string, UninstallRequest>;
 
   constructor() {
-    this.users = new Map();
+    this.requests = new Map();
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async incrementUninstallCount(programName: string): Promise<UninstallRequest> {
+    const normalizedName = programName.toLowerCase().trim();
+    const existing = this.requests.get(normalizedName);
+    
+    if (existing) {
+      existing.count++;
+      this.requests.set(normalizedName, existing);
+      return existing;
+    } else {
+      const newRequest: UninstallRequest = {
+        id: crypto.randomUUID(),
+        programName: programName.trim(),
+        count: 1,
+      };
+      this.requests.set(normalizedName, newRequest);
+      return newRequest;
+    }
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getAllUninstallRequests(): Promise<UninstallRequest[]> {
+    return Array.from(this.requests.values()).sort((a, b) => b.count - a.count);
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async getUninstallRequest(programName: string): Promise<UninstallRequest | undefined> {
+    const normalizedName = programName.toLowerCase().trim();
+    return this.requests.get(normalizedName);
   }
 }
 
