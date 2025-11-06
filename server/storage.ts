@@ -4,6 +4,7 @@ export interface IStorage {
   incrementUninstallCount(programName: string): Promise<UninstallRequest>;
   getAllUninstallRequests(): Promise<UninstallRequest[]>;
   getUninstallRequest(programName: string): Promise<UninstallRequest | undefined>;
+  resetAllRequests(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -39,6 +40,10 @@ export class MemStorage implements IStorage {
   async getUninstallRequest(programName: string): Promise<UninstallRequest | undefined> {
     const normalizedName = programName.toLowerCase().trim();
     return this.requests.get(normalizedName);
+  }
+
+  async resetAllRequests(): Promise<void> {
+    this.requests.clear();
   }
 }
 

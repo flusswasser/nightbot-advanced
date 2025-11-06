@@ -29,6 +29,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/uninstall/reset", async (req, res) => {
+    try {
+      await storage.resetAllRequests();
+      res.json({ success: true, message: "All requests reset" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to reset requests" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
