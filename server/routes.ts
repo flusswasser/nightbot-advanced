@@ -12,7 +12,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const result = await storage.incrementUninstallCount(program);
-      const message = `chat has requested to uninstall ${result.programName} ${result.count} ${result.count === 1 ? 'time' : 'times'}, go ahead and do it already`;
+      const message = `Chat has requested to uninstall ${result.programName} ${result.count} ${result.count === 1 ? 'time' : 'times'}. Go ahead and do it already!`;
       
       res.type('text/plain').send(message);
     } catch (error) {
