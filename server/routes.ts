@@ -16,6 +16,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.type('text/plain').send(message);
     } catch (error) {
+      console.error("Error in /api/uninstall:", error);
       res.status(500).type('text/plain').send("Failed to process request");
     }
   });
@@ -25,6 +26,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const requests = await storage.getAllUninstallRequests();
       res.json(requests);
     } catch (error) {
+      console.error("Error in /api/uninstall/all:", error);
       res.status(500).json({ error: "Failed to fetch requests" });
     }
   });

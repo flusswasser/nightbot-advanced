@@ -1,6 +1,6 @@
 import { uninstallRequests, type UninstallRequest } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ilike } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   incrementUninstallCount(programName: string): Promise<UninstallRequest>;
@@ -51,7 +51,7 @@ export class DatabaseStorage implements IStorage {
     const requests = await db
       .select()
       .from(uninstallRequests)
-      .where(ilike(uninstallRequests.programName, trimmedName));
+      .where(sql`LOWER(${uninstallRequests.programName}) = LOWER(${trimmedName})`);
     return requests[0] || undefined;
   }
 
@@ -63,7 +63,7 @@ export class DatabaseStorage implements IStorage {
     const trimmedName = programName.trim();
     const result = await db
       .delete(uninstallRequests)
-      .where(ilike(uninstallRequests.programName, trimmedName))
+      .where(sql`LOWER(${uninstallRequests.programName}) = LOWER(${trimmedName})`)
       .returning();
     return result.length > 0;
   }
