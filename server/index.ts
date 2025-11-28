@@ -6,7 +6,7 @@ interface YouTubeSubscription {
   channelId: string;
   channelName: string;
   discordChannelId: string;
-  lastCheckTime: number;
+  lastPostedVideoId: string;
 }
 
 const app = express();
@@ -175,9 +175,9 @@ async function notifyNewVideo(
 async function checkForNewVideos() {
   for (const sub of subscriptions) {
     const video = await getLatestVideo(sub.channelId);
-    if (video && video.publishedAt > sub.lastCheckTime) {
+    if (video && video.videoId !== sub.lastPostedVideoId) {
       await notifyNewVideo(sub.discordChannelId, video);
-      sub.lastCheckTime = video.publishedAt;
+      sub.lastPostedVideoId = video.videoId;
     }
   }
 }
@@ -222,10 +222,10 @@ async function initializeBot() {
           channelId: youtubeChannelId,
           channelName: video.channelTitle,
           discordChannelId: message.channelId,
-          lastCheckTime: Date.now(),
+          lastPostedVideoId: video.videoId,
         });
 
-        await message.reply(`✓ Subscribed to **${video.channelTitle}**!`);
+        await message.reply(`✓ Subscribed to **${video.channelTitle}**!\n📹 Latest video: ${video.title}`);
       } else if (command === 'subscriptions') {
         const channelSubs = subscriptions.filter(s => s.discordChannelId === message.channelId);
         if (channelSubs.length === 0) {
