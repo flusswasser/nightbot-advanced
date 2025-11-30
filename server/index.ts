@@ -11,17 +11,29 @@ interface YouTubeSubscription {
   lastPostedVideoId: string;
 }
 
+interface TwitchSubscription {
+  twitchUsername: string;
+  twitchUserId: string;
+  twitchDisplayName: string;
+  discordChannelId: string;
+  lastNotifiedStreamId: string;
+}
+
 const app = express();
 app.use(express.json());
 
 // Initialize Discord client
 let client: Client | null = null;
 let subscriptions: YouTubeSubscription[] = [];
+let twitchSubscriptions: TwitchSubscription[] = [];
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID;
+const TWITCH_ACCESS_TOKEN = process.env.TWITCH_ACCESS_TOKEN;
 const CHECK_INTERVAL = 300000;
 const SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'subscriptions.json');
+const TWITCH_SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'twitch_subscriptions.json');
 
 // Load subscriptions from file
 function loadSubscriptions() {
@@ -29,7 +41,12 @@ function loadSubscriptions() {
     if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
       const data = fs.readFileSync(SUBSCRIPTIONS_FILE, 'utf-8');
       subscriptions = JSON.parse(data);
-      console.log(`✓ Loaded ${subscriptions.length} subscriptions from file`);
+      console.log(`✓ Loaded ${subscriptions.length} YouTube subscriptions from file`);
+    }
+    if (fs.existsSync(TWITCH_SUBSCRIPTIONS_FILE)) {
+      const data = fs.readFileSync(TWITCH_SUBSCRIPTIONS_FILE, 'utf-8');
+      twitchSubscriptions = JSON.parse(data);
+      console.log(`✓ Loaded ${twitchSubscriptions.length} Twitch subscriptions from file`);
     }
   } catch (error) {
     console.error('Error loading subscriptions:', error);
@@ -40,6 +57,7 @@ function loadSubscriptions() {
 function saveSubscriptions() {
   try {
     fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(subscriptions, null, 2), 'utf-8');
+    fs.writeFileSync(TWITCH_SUBSCRIPTIONS_FILE, JSON.stringify(twitchSubscriptions, null, 2), 'utf-8');
   } catch (error) {
     console.error('Error saving subscriptions:', error);
   }
@@ -230,6 +248,92 @@ async function checkForNewVideos() {
     if (video && video.videoId !== sub.lastPostedVideoId) {
       await notifyNewVideo(sub.discordChannelId, video);
       sub.lastPostedVideoId = video.videoId;
+      saveSubscriptions();
+    }
+  }
+}
+
+// Twitch API functions
+async function getTwitchUserInfo(username: string) {
+  try {
+    const response = await axios.get('https://api.twitch.tv/helix/users', {
+      headers: {
+        'Client-ID': TWITCH_CLIENT_ID,
+        'Authorization': `Bearer ${TWITCH_ACCESS_TOKEN}`,
+      },
+      params: {
+        login: username,
+      },
+    });
+
+    if (response.data.data && response.data.data.length > 0) {
+      return response.data.data[0];
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching Twitch user ${username}:`, error);
+    return null;
+  }
+}
+
+async function checkIfTwitchLive(userId: string) {
+  try {
+    const response = await axios.get('https://api.twitch.tv/helix/streams', {
+      headers: {
+        'Client-ID': TWITCH_CLIENT_ID,
+        'Authorization': `Bearer ${TWITCH_ACCESS_TOKEN}`,
+      },
+      params: {
+        user_id: userId,
+      },
+    });
+
+    if (response.data.data && response.data.data.length > 0) {
+      return response.data.data[0];
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error checking Twitch stream status for user ${userId}:`, error);
+    return null;
+  }
+}
+
+async function notifyTwitchLive(
+  discordChannelId: string,
+  stream: any,
+  displayName: string
+) {
+  try {
+    if (!client) return;
+
+    const channel = await client.channels.fetch(discordChannelId);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      console.error(`Invalid Discord channel: ${discordChannelId}`);
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`${displayName} is now live on Twitch!`)
+      .setDescription(stream.title)
+      .setURL(`https://www.twitch.tv/${stream.user_login}`)
+      .setThumbnail(stream.thumbnail_url.replace('{width}', '320').replace('{height}', '180'))
+      .setColor(0x9146FF)
+      .setTimestamp();
+
+    await channel.send({ embeds: [embed] });
+    console.log(`✓ Notified about Twitch stream: ${displayName}`);
+  } catch (error) {
+    console.error('Error sending Twitch notification:', error);
+  }
+}
+
+async function checkForLiveStreams() {
+  for (const sub of twitchSubscriptions) {
+    const stream = await checkIfTwitchLive(sub.twitchUserId);
+    if (stream && stream.id !== sub.lastNotifiedStreamId) {
+      await notifyTwitchLive(sub.discordChannelId, stream, sub.twitchDisplayName);
+      sub.lastNotifiedStreamId = stream.id;
+      saveSubscriptions();
     }
   }
 }
@@ -245,6 +349,9 @@ async function initializeBot() {
       console.log(`✓ Discord bot logged in as ${client?.user?.tag}`);
       client?.user?.setActivity('Eating Cookies', { type: ActivityType.Custom });
       setInterval(checkForNewVideos, CHECK_INTERVAL);
+      if (TWITCH_CLIENT_ID && TWITCH_ACCESS_TOKEN) {
+        setInterval(checkForLiveStreams, CHECK_INTERVAL);
+      }
     });
 
     client.on('messageCreate', async (message) => {
@@ -310,6 +417,62 @@ async function initializeBot() {
         const removed = subscriptions.splice(index, 1)[0];
         saveSubscriptions();
         await message.reply(`✓ Unsubscribed from **${removed.channelName}**`);
+      } else if (command === 'tsub') {
+        if (!TWITCH_CLIENT_ID || !TWITCH_ACCESS_TOKEN) {
+          await message.reply('❌ Twitch integration not configured.');
+          return;
+        }
+        const twitchUsername = args[0];
+        if (!twitchUsername) {
+          await message.reply('**Usage:** `!tsub <TWITCH_USERNAME>`');
+          return;
+        }
+
+        const userInfo = await getTwitchUserInfo(twitchUsername);
+        if (!userInfo) {
+          await message.reply('❌ Could not find Twitch user with that username.');
+          return;
+        }
+
+        if (twitchSubscriptions.some(s => s.twitchUserId === userInfo.id && s.discordChannelId === message.channelId)) {
+          await message.reply(`Already subscribed to **${userInfo.display_name}**.`);
+          return;
+        }
+
+        twitchSubscriptions.push({
+          twitchUsername: userInfo.login,
+          twitchUserId: userInfo.id,
+          twitchDisplayName: userInfo.display_name,
+          discordChannelId: message.channelId,
+          lastNotifiedStreamId: '',
+        });
+        saveSubscriptions();
+
+        await message.reply(`✓ Subscribed to **${userInfo.display_name}** on Twitch! You'll be notified when they go live.`);
+      } else if (command === 'tsubs') {
+        const channelSubs = twitchSubscriptions.filter(s => s.discordChannelId === message.channelId);
+        if (channelSubs.length === 0) {
+          await message.reply('No Twitch subscriptions in this channel.');
+          return;
+        }
+        const list = channelSubs.map((s, i) => `${i + 1}. **${s.twitchDisplayName}**`).join('\n');
+        await message.reply(`**Twitch Subscriptions:**\n${list}`);
+      } else if (command === 'tunsub') {
+        const twitchUsername = args[0];
+        if (!twitchUsername) {
+          await message.reply('**Usage:** `!tunsub <TWITCH_USERNAME>`');
+          return;
+        }
+        const index = twitchSubscriptions.findIndex(
+          (s) => s.twitchUsername === twitchUsername.toLowerCase() && s.discordChannelId === message.channelId
+        );
+        if (index === -1) {
+          await message.reply('Twitch subscription not found.');
+          return;
+        }
+        const removed = twitchSubscriptions.splice(index, 1)[0];
+        saveSubscriptions();
+        await message.reply(`✓ Unsubscribed from **${removed.twitchDisplayName}**`);
       }
       } catch (error) {
         console.error('Error handling message:', error);
