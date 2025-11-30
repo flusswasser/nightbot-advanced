@@ -547,10 +547,21 @@ async function initializeBot() {
           return;
         }
         
-        if (!twitchOAuthToken && twitchDeviceAuthUrl) {
-          await message.reply(`⚠️ Twitch authorization needed!\nGo to: ${twitchDeviceAuthUrl} to authorize the bot.`);
-          return;
+        // If no token, either initiate auth or ask them to authorize
+        if (!twitchOAuthToken) {
+          if (!twitchDeviceCode) {
+            await initiateTwitchDeviceAuth();
+          } else {
+            // Try polling in case they just authorized
+            await pollTwitchDeviceAuth();
+          }
+          
+          if (twitchDeviceAuthUrl && !twitchOAuthToken) {
+            await message.reply(`⚠️ Twitch authorization needed!\nGo to: ${twitchDeviceAuthUrl} to authorize the bot.\nThen try the command again!`);
+            return;
+          }
         }
+        
         const twitchUsername = args[0];
         if (!twitchUsername) {
           await message.reply('**Usage:** `!tsub <TWITCH_USERNAME>`');
