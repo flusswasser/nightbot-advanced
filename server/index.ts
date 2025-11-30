@@ -30,12 +30,22 @@ let twitchSubscriptions: TwitchSubscription[] = [];
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID;
-const TWITCH_ACCESS_TOKEN = process.env.TWITCH_ACCESS_TOKEN;
+const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
 const CHECK_INTERVAL = 300000;
 const SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'subscriptions.json');
 const TWITCH_SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'twitch_subscriptions.json');
+const TWITCH_TOKEN_FILE = path.join(process.cwd(), 'twitch_token.json');
 
-// Load subscriptions from file
+interface TwitchOAuthToken {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  expires_at: number;
+}
+
+let twitchOAuthToken: TwitchOAuthToken | null = null;
+
+// Load subscriptions and Twitch token from file
 function loadSubscriptions() {
   try {
     if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
@@ -48,18 +58,62 @@ function loadSubscriptions() {
       twitchSubscriptions = JSON.parse(data);
       console.log(`✓ Loaded ${twitchSubscriptions.length} Twitch subscriptions from file`);
     }
+    if (fs.existsSync(TWITCH_TOKEN_FILE)) {
+      const data = fs.readFileSync(TWITCH_TOKEN_FILE, 'utf-8');
+      twitchOAuthToken = JSON.parse(data);
+      console.log(`✓ Loaded Twitch OAuth token`);
+    }
   } catch (error) {
     console.error('Error loading subscriptions:', error);
   }
 }
 
-// Save subscriptions to file
+// Save subscriptions and Twitch token to file
 function saveSubscriptions() {
   try {
     fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(subscriptions, null, 2), 'utf-8');
     fs.writeFileSync(TWITCH_SUBSCRIPTIONS_FILE, JSON.stringify(twitchSubscriptions, null, 2), 'utf-8');
+    if (twitchOAuthToken) {
+      fs.writeFileSync(TWITCH_TOKEN_FILE, JSON.stringify(twitchOAuthToken, null, 2), 'utf-8');
+    }
   } catch (error) {
     console.error('Error saving subscriptions:', error);
+  }
+}
+
+// Get a valid Twitch OAuth token (refresh if needed)
+async function getTwitchAccessToken(): Promise<string | null> {
+  if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) {
+    return null;
+  }
+
+  // Check if token is expired
+  if (twitchOAuthToken && twitchOAuthToken.expires_at > Date.now()) {
+    return twitchOAuthToken.access_token;
+  }
+
+  // Request new token using client credentials flow
+  try {
+    const response = await axios.post('https://id.twitch.tv/oauth2/token', null, {
+      params: {
+        client_id: TWITCH_CLIENT_ID,
+        client_secret: TWITCH_CLIENT_SECRET,
+        grant_type: 'client_credentials',
+      },
+    });
+
+    twitchOAuthToken = {
+      access_token: response.data.access_token,
+      token_type: response.data.token_type,
+      expires_in: response.data.expires_in,
+      expires_at: Date.now() + response.data.expires_in * 1000,
+    };
+    saveSubscriptions();
+    console.log('✓ Obtained new Twitch OAuth token');
+    return twitchOAuthToken.access_token;
+  } catch (error) {
+    console.error('Error obtaining Twitch OAuth token:', error);
+    return null;
   }
 }
 
@@ -115,7 +169,17 @@ const setupHTML = `
     </div>
 
     <div class="step">
-      <h2>Step 3: Invite Bot to Discord</h2>
+      <h2>Step 3: Get Twitch OAuth Credentials</h2>
+      <p>1. Go to <a href="https://dev.twitch.tv/console/apps" target="_blank">Twitch Developer Console</a></p>
+      <p>2. Create a new application</p>
+      <p>3. Go to "OAuth" tab and copy your Client ID and Client Secret</p>
+      <p>4. In Replit Secrets, add:</p>
+      <div class="code">TWITCH_CLIENT_ID = your_client_id</div>
+      <div class="code">TWITCH_CLIENT_SECRET = your_client_secret</div>
+    </div>
+
+    <div class="step">
+      <h2>Step 4: Invite Bot to Discord</h2>
       <p>1. In Developer Portal, go to OAuth2 → URL Generator</p>
       <p>2. Select scopes: <strong>bot</strong></p>
       <p>3. Select permissions: <strong>Send Messages, Embed Links, Read Message History</strong></p>
@@ -128,9 +192,12 @@ const setupHTML = `
 
     <div class="step">
       <h2>Bot Commands</h2>
-      <p><strong>!subscribe &lt;YOUTUBE_CHANNEL_ID&gt;</strong> - Subscribe to new uploads</p>
-      <p><strong>!subscriptions</strong> - View active subscriptions</p>
-      <p><strong>!unsubscribe &lt;YOUTUBE_CHANNEL_ID&gt;</strong> - Remove subscription</p>
+      <p><strong>!sub &lt;YOUTUBE_CHANNEL_ID&gt;</strong> - Subscribe to YouTube uploads</p>
+      <p><strong>!subs</strong> - View YouTube subscriptions</p>
+      <p><strong>!unsub &lt;YOUTUBE_CHANNEL_ID&gt;</strong> - Remove YouTube subscription</p>
+      <p><strong>!tsub &lt;TWITCH_USERNAME&gt;</strong> - Subscribe to Twitch streams</p>
+      <p><strong>!tsubs</strong> - View Twitch subscriptions</p>
+      <p><strong>!tunsub &lt;TWITCH_USERNAME&gt;</strong> - Remove Twitch subscription</p>
     </div>
 
     <div class="step">
@@ -256,10 +323,16 @@ async function checkForNewVideos() {
 // Twitch API functions
 async function getTwitchUserInfo(username: string) {
   try {
+    const accessToken = await getTwitchAccessToken();
+    if (!accessToken) {
+      console.error('Could not obtain Twitch access token');
+      return null;
+    }
+
     const response = await axios.get('https://api.twitch.tv/helix/users', {
       headers: {
         'Client-ID': TWITCH_CLIENT_ID,
-        'Authorization': `Bearer ${TWITCH_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
       },
       params: {
         login: username,
@@ -278,10 +351,16 @@ async function getTwitchUserInfo(username: string) {
 
 async function checkIfTwitchLive(userId: string) {
   try {
+    const accessToken = await getTwitchAccessToken();
+    if (!accessToken) {
+      console.error('Could not obtain Twitch access token');
+      return null;
+    }
+
     const response = await axios.get('https://api.twitch.tv/helix/streams', {
       headers: {
         'Client-ID': TWITCH_CLIENT_ID,
-        'Authorization': `Bearer ${TWITCH_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
       },
       params: {
         user_id: userId,
@@ -349,7 +428,7 @@ async function initializeBot() {
       console.log(`✓ Discord bot logged in as ${client?.user?.tag}`);
       client?.user?.setActivity('Eating Cookies', { type: ActivityType.Custom });
       setInterval(checkForNewVideos, CHECK_INTERVAL);
-      if (TWITCH_CLIENT_ID && TWITCH_ACCESS_TOKEN) {
+      if (TWITCH_CLIENT_ID && TWITCH_CLIENT_SECRET) {
         setInterval(checkForLiveStreams, CHECK_INTERVAL);
       }
     });
@@ -418,7 +497,7 @@ async function initializeBot() {
         saveSubscriptions();
         await message.reply(`✓ Unsubscribed from **${removed.channelName}**`);
       } else if (command === 'tsub') {
-        if (!TWITCH_CLIENT_ID || !TWITCH_ACCESS_TOKEN) {
+        if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) {
           await message.reply('❌ Twitch integration not configured.');
           return;
         }
