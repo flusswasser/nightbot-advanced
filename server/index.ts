@@ -387,7 +387,17 @@ async function getTwitchUserInfo(username: string) {
       return response.data.data[0];
     }
     return null;
-  } catch (error) {
+  } catch (error: any) {
+    // If we get a 401, the token is invalid - clear it and require re-auth
+    if (error.response?.status === 401) {
+      console.log('🔴 Twitch token invalid - clearing and requiring re-authorization');
+      twitchOAuthToken = null;
+      twitchDeviceCode = null;
+      if (fs.existsSync(TWITCH_TOKEN_FILE)) {
+        fs.unlinkSync(TWITCH_TOKEN_FILE);
+      }
+      return null;
+    }
     console.error(`Error fetching Twitch user ${username}:`, error);
     return null;
   }
@@ -415,7 +425,17 @@ async function checkIfTwitchLive(userId: string) {
       return response.data.data[0];
     }
     return null;
-  } catch (error) {
+  } catch (error: any) {
+    // If we get a 401, the token is invalid - clear it and require re-auth
+    if (error.response?.status === 401) {
+      console.log('🔴 Twitch token invalid - clearing and requiring re-authorization');
+      twitchOAuthToken = null;
+      twitchDeviceCode = null;
+      if (fs.existsSync(TWITCH_TOKEN_FILE)) {
+        fs.unlinkSync(TWITCH_TOKEN_FILE);
+      }
+      return null;
+    }
     console.error(`Error checking Twitch stream status for user ${userId}:`, error);
     return null;
   }
