@@ -234,10 +234,10 @@ async function initializeBot() {
         const command = args.shift()?.toLowerCase();
         console.log(`Command: ${command}, Args: ${args.join(', ')}`);
 
-        if (command === 'subscribe') {
+        if (command === 'sub') {
         const youtubeChannelId = args[0];
         if (!youtubeChannelId) {
-          await message.reply('**Usage:** `!subscribe <YOUTUBE_CHANNEL_ID>`');
+          await message.reply('**Usage:** `!sub <YOUTUBE_CHANNEL_ID>`');
           return;
         }
 
@@ -260,7 +260,7 @@ async function initializeBot() {
         });
 
         await message.reply(`✓ Subscribed to **${video.channelTitle}**!\n📹 Latest video: ${video.title}`);
-      } else if (command === 'subscriptions') {
+      } else if (command === 'subs') {
         const channelSubs = subscriptions.filter(s => s.discordChannelId === message.channelId);
         if (channelSubs.length === 0) {
           await message.reply('No subscriptions in this channel.');
@@ -268,10 +268,10 @@ async function initializeBot() {
         }
         const list = channelSubs.map((s, i) => `${i + 1}. **${s.channelName}**`).join('\n');
         await message.reply(`**Subscriptions:**\n${list}`);
-      } else if (command === 'unsubscribe') {
+      } else if (command === 'unsub') {
         const youtubeChannelId = args[0];
         if (!youtubeChannelId) {
-          await message.reply('**Usage:** `!unsubscribe <YOUTUBE_CHANNEL_ID>`');
+          await message.reply('**Usage:** `!unsub <YOUTUBE_CHANNEL_ID>`');
           return;
         }
         const index = subscriptions.findIndex(
