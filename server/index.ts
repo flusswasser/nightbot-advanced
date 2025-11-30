@@ -1,6 +1,8 @@
 import express from 'express';
 import { Client, ChannelType, EmbedBuilder, ActivityType } from 'discord.js';
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
 
 interface YouTubeSubscription {
   channelId: string;
@@ -19,6 +21,29 @@ let subscriptions: YouTubeSubscription[] = [];
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CHECK_INTERVAL = 300000;
+const SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'subscriptions.json');
+
+// Load subscriptions from file
+function loadSubscriptions() {
+  try {
+    if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
+      const data = fs.readFileSync(SUBSCRIPTIONS_FILE, 'utf-8');
+      subscriptions = JSON.parse(data);
+      console.log(`✓ Loaded ${subscriptions.length} subscriptions from file`);
+    }
+  } catch (error) {
+    console.error('Error loading subscriptions:', error);
+  }
+}
+
+// Save subscriptions to file
+function saveSubscriptions() {
+  try {
+    fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(subscriptions, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Error saving subscriptions:', error);
+  }
+}
 
 // Setup page HTML
 const setupHTML = `
@@ -258,6 +283,7 @@ async function initializeBot() {
           discordChannelId: message.channelId,
           lastPostedVideoId: video.videoId,
         });
+        saveSubscriptions();
 
         await message.reply(`✓ Subscribed to **${video.channelTitle}**!\n📹 Latest video: ${video.title}`);
       } else if (command === 'subs') {
@@ -282,6 +308,7 @@ async function initializeBot() {
           return;
         }
         const removed = subscriptions.splice(index, 1)[0];
+        saveSubscriptions();
         await message.reply(`✓ Unsubscribed from **${removed.channelName}**`);
       }
       } catch (error) {
@@ -312,6 +339,7 @@ app.get('/health', (req, res) => {
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
+  loadSubscriptions();
   initializeBot();
 });
 
