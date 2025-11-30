@@ -46,6 +46,7 @@ interface TwitchOAuthToken {
 let twitchOAuthToken: TwitchOAuthToken | null = null;
 let twitchDeviceAuthUrl: string | null = null;
 let twitchDeviceCode: string | null = null;
+let twitchCheckInterval: NodeJS.Timeout | null = null;
 
 // Load subscriptions and Twitch token from file
 function loadSubscriptions() {
@@ -124,6 +125,13 @@ async function pollTwitchDeviceAuth(): Promise<boolean> {
     };
     saveSubscriptions();
     console.log('✓ Obtained Twitch OAuth token via device flow');
+    
+    // Start the live stream checking interval if not already running
+    if (!twitchCheckInterval) {
+      twitchCheckInterval = setInterval(checkForLiveStreams, TWITCH_CHECK_INTERVAL);
+      console.log('✓ Started Twitch live stream checking interval');
+    }
+    
     return true;
   } catch (error: any) {
     if (error.response?.data?.error === 'authorization_pending') {
@@ -466,9 +474,10 @@ async function initializeBot() {
       setInterval(checkForNewVideos, YOUTUBE_CHECK_INTERVAL);
       if (TWITCH_CLIENT_ID) {
         // Try to load existing token or initiate device auth
-        if (twitchOAuthToken) {
-          setInterval(checkForLiveStreams, TWITCH_CHECK_INTERVAL);
-        } else {
+        if (twitchOAuthToken && !twitchCheckInterval) {
+          twitchCheckInterval = setInterval(checkForLiveStreams, TWITCH_CHECK_INTERVAL);
+          console.log('✓ Started Twitch live stream checking interval');
+        } else if (!twitchOAuthToken) {
           initiateTwitchDeviceAuth();
         }
       }
