@@ -546,25 +546,41 @@ async function initializeBot() {
         const removed = subscriptions.splice(index, 1)[0];
         saveSubscriptions();
         await message.reply(`✓ Unsubscribed from **${removed.channelName}**`);
+      } else if (command === 'tauth') {
+        if (!TWITCH_CLIENT_ID) {
+          await message.reply('❌ Twitch integration not configured.');
+          return;
+        }
+        
+        if (twitchOAuthToken && twitchOAuthToken.expires_at > Date.now()) {
+          await message.reply('✓ You are already authenticated with Twitch!');
+          return;
+        }
+        
+        if (!twitchDeviceCode) {
+          await initiateTwitchDeviceAuth();
+        } else {
+          // Try polling in case they just authorized
+          await pollTwitchDeviceAuth();
+          if (twitchOAuthToken) {
+            await message.reply('✓ Authorization successful! You can now use Twitch commands.');
+            return;
+          }
+        }
+        
+        if (twitchDeviceAuthUrl) {
+          await message.reply(`🔐 **Twitch Authorization**\nGo to: ${twitchDeviceAuthUrl}\nEnter the code shown and authorize the bot.\nOnce authorized, you can use Twitch commands!`);
+        }
       } else if (command === 'tsub') {
         if (!TWITCH_CLIENT_ID) {
           await message.reply('❌ Twitch integration not configured.');
           return;
         }
         
-        // If no token, either initiate auth or ask them to authorize
-        if (!twitchOAuthToken) {
-          if (!twitchDeviceCode) {
-            await initiateTwitchDeviceAuth();
-          } else {
-            // Try polling in case they just authorized
-            await pollTwitchDeviceAuth();
-          }
-          
-          if (twitchDeviceAuthUrl && !twitchOAuthToken) {
-            await message.reply(`⚠️ Twitch authorization needed!\nGo to: ${twitchDeviceAuthUrl} to authorize the bot.\nThen try the command again!`);
-            return;
-          }
+        // Check if token exists and is valid
+        if (!twitchOAuthToken || twitchOAuthToken.expires_at <= Date.now()) {
+          await message.reply('⚠️ Twitch authorization needed!\nUse `!tauth` to authorize first, then you can subscribe to streamers.');
+          return;
         }
         
         const twitchUsername = args[0];
