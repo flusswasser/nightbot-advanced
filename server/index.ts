@@ -630,7 +630,7 @@ async function initializeBot() {
       } else if (command === 'wiggle') {
         await message.reply(':ellenaWIGGLE: :ellenaWIGGLE: :ellenaWIGGLE: :ellenaWIGGLE: :ellenaWIGGLE: :ellenaWIGGLE: :ellenaWIGGLE:');
       } else if (command === 'dino') {
-        await message.reply(':ellenaDINO: :ellenaDINO: :ellenaDINO: :ellenaDINO: :ellenaDINO: :ellenaDINO: :ellenaDINO:');
+        await message.reply('<a:ellenaDINO:1105677378132389939> <a:ellenaDINO:1105677378132389939> <a:ellenaDINO:1105677378132389939> <a:ellenaDINO:1105677378132389939> <a:ellenaDINO:1105677378132389939> <a:ellenaDINO:1105677378132389939> <a:ellenaDINO:1105677378132389939>');
       } else if (command === 'test') {
         await message.reply(':ellena6BLANKIE: :ellena6DINO: :ellena6FRIEND: :ellena6NYOOM: :ellena6PANDA:');
       }
