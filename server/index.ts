@@ -334,15 +334,10 @@ async function notifyNewVideo(
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle(`New Video from ${video.channelTitle}`)
-      .setDescription(video.title)
-      .setURL(`https://www.youtube.com/watch?v=${video.videoId}`)
-      .setThumbnail(video.thumbnail || '')
-      .setColor(0xFF0000)
-      .setTimestamp(video.publishedAt);
+    const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+    const message = `**New Video from ${video.channelTitle}**\n${video.title}\n\n${videoUrl}`;
 
-    await channel.send({ embeds: [embed] });
+    await channel.send(message);
     console.log(`✓ Notified about video: ${video.title}`);
   } catch (error) {
     console.error('Error sending Discord notification:', error);
