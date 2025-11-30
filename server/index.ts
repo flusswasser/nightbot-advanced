@@ -113,28 +113,48 @@ const setupHTML = `
 // YouTube API functions
 async function getLatestVideo(channelId: string) {
   try {
-    const response = await axios.get(
-      'https://www.googleapis.com/youtube/v3/search',
+    // First get the channel info to find its uploads playlist
+    const channelResponse = await axios.get(
+      'https://www.googleapis.com/youtube/v3/channels',
+      {
+        params: {
+          part: 'contentDetails,snippet',
+          id: channelId,
+          key: YOUTUBE_API_KEY,
+        },
+      }
+    );
+
+    if (!channelResponse.data.items || channelResponse.data.items.length === 0) {
+      console.error(`Channel not found: ${channelId}`);
+      return null;
+    }
+
+    const channelTitle = channelResponse.data.items[0].snippet.title;
+    const uploadsPlaylistId = channelResponse.data.items[0].contentDetails.relatedPlaylists.uploads;
+
+    // Now get videos from the uploads playlist
+    const videosResponse = await axios.get(
+      'https://www.googleapis.com/youtube/v3/playlistItems',
       {
         params: {
           part: 'snippet',
-          channelId: channelId,
-          order: 'date',
+          playlistId: uploadsPlaylistId,
           maxResults: 1,
           key: YOUTUBE_API_KEY,
         },
       }
     );
 
-    if (response.data.items && response.data.items.length > 0) {
-      const video = response.data.items[0];
+    if (videosResponse.data.items && videosResponse.data.items.length > 0) {
+      const video = videosResponse.data.items[0];
       return {
-        videoId: video.id.videoId,
+        videoId: video.snippet.resourceId.videoId,
         title: video.snippet.title,
         description: video.snippet.description,
         publishedAt: new Date(video.snippet.publishedAt).getTime(),
         thumbnail: video.snippet.thumbnails.high?.url,
-        channelTitle: video.snippet.channelTitle,
+        channelTitle: channelTitle,
       };
     }
     return null;
