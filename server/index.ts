@@ -110,7 +110,7 @@ async function pollTwitchDeviceAuth(): Promise<boolean> {
     const response = await axios.post('https://id.twitch.tv/oauth2/token', null, {
       params: {
         client_id: TWITCH_CLIENT_ID,
-        device_id: twitchDeviceCode,
+        device_code: twitchDeviceCode,
         grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
       },
     });
