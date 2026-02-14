@@ -26,5 +26,19 @@
     "twitchDisplayName": "snowie_friend",
     "discordChannelId": "1165327903005872300",
     "lastNotifiedStreamId": "314967733331"
+  },
+  {
+    "twitchUsername": "zackrawrr",
+    "twitchUserId": "552120296",
+    "twitchDisplayName": "zackrawrr",
+    "discordChannelId": "1165327903005872300",
+    "lastNotifiedStreamId": "316743179863"
+  },
+  {
+    "twitchUsername": "lydah_myosotis",
+    "twitchUserId": "855908681",
+    "twitchDisplayName": "Lydah_Myosotis",
+    "discordChannelId": "1165327903005872300",
+    "lastNotifiedStreamId": "315376877909"
   }
 ]

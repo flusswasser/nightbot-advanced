@@ -33,7 +33,8 @@ const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID;
 const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
 const YOUTUBE_CHECK_INTERVAL = 300000; // 5 minutes
 const TWITCH_CHECK_INTERVAL = 150000; // 150 seconds
-const REDIRECT_URI = process.env.REPL_ID ? `https://${process.env.REPL_ID}.id.repl.co/twitch/callback` : 'http://localhost:5000/twitch/callback';
+// Hardcoded to match your current Replit address exactly
+const REDIRECT_URI = 'https://df2673bc-0191-4754-b101-eaaf12d75e9b-00-3nbpqqx1vuoa1.sisko.replit.dev/twitch/callback';
 
 const SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'subscriptions.json');
 const TWITCH_SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'twitch_subscriptions.json');
