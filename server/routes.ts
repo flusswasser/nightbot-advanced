@@ -6,54 +6,50 @@ import { createServer, type Server } from "http";
 
 // --- Storage Logic ---
 export interface IStorage {
-  // Uninstall Requests
-  incrementUninstallCount(programName: string): Promise<UninstallRequest>;
-  getAllUninstallRequests(): Promise<UninstallRequest[]>;
-  getUninstallRequest(programName: string): Promise<UninstallRequest | undefined>;
-  resetAllRequests(): Promise<void>;
-  deleteRequest(programName: string): Promise<boolean>;
+  // Uninstall Requests (Isolated by Channel)
+  incrementUninstallCount(channelId: string, programName: string): Promise<UninstallRequest>;
+  getAllUninstallRequests(channelId: string): Promise<UninstallRequest[]>;
+  resetAllRequests(channelId: string): Promise<void>;
+  deleteRequest(channelId: string, programName: string): Promise<boolean>;
 
-  // Players
-  getPlayers(): Promise<Player[]>;
-  getPlayer(id: string): Promise<Player | undefined>;
-  updatePlayerName(id: string, name: string): Promise<Player>;
-  resetPlayerDeaths(id: string): Promise<void>;
+  // Channels/Players
+  getChannels(): Promise<Player[]>;
+  getChannel(id: string): Promise<Player | undefined>;
+  updateChannelName(id: string, name: string): Promise<Player>;
+  resetChannelDeaths(id: string): Promise<void>;
 
-  // Death Counter
-  getBoss(name: string, playerId: string): Promise<Boss | undefined>;
-  getActiveBoss(playerId: string): Promise<Boss | undefined>;
-  upsertBoss(name: string, playerId: string): Promise<Boss>;
-  incrementDeaths(playerId: string, bossName?: string): Promise<Boss>;
-  setDeaths(playerId: string, bossName: string, count: number): Promise<Boss>;
-  markBeaten(playerId: string, bossName?: string): Promise<Boss>;
-  getAllBosses(playerId: string): Promise<Boss[]>;
+  // Death Counter (Isolated by Channel)
+  getBoss(channelId: string, name: string): Promise<Boss | undefined>;
+  getActiveBoss(channelId: string): Promise<Boss | undefined>;
+  upsertBoss(channelId: string, name: string): Promise<Boss>;
+  incrementDeaths(channelId: string, bossName?: string): Promise<Boss>;
+  setDeaths(channelId: string, bossName: string, count: number): Promise<Boss>;
+  markBeaten(channelId: string, bossName?: string): Promise<Boss>;
+  getAllBosses(channelId: string): Promise<Boss[]>;
 }
 
 const DATA_FILE = path.join(process.cwd(), "data.json");
 
 interface DataStructure {
-  uninstallRequests: Record<string, UninstallRequest>;
-  bosses: Record<string, Boss>;
-  players: Record<string, Player>;
+  // Maps channelId -> Data
+  channels: Record<string, Player>;
+  uninstallRequests: Record<string, Record<string, UninstallRequest>>;
+  bosses: Record<string, Record<string, Boss>>;
 }
 
 async function readData(): Promise<DataStructure> {
   try {
     const content = await fs.readFile(DATA_FILE, "utf-8");
     const parsed = JSON.parse(content) as DataStructure;
-    if (!parsed.players) {
-      parsed.players = {
-        "default": { id: "default", name: "Mango", isDefault: true }
-      };
-    }
+    if (!parsed.channels) parsed.channels = {};
+    if (!parsed.uninstallRequests) parsed.uninstallRequests = {};
+    if (!parsed.bosses) parsed.bosses = {};
     return parsed;
   } catch {
     return { 
+      channels: {}, 
       uninstallRequests: {}, 
-      bosses: {}, 
-      players: { 
-        "default": { id: "default", name: "Mango", isDefault: true } 
-      } 
+      bosses: {} 
     };
   }
 }
@@ -71,162 +67,158 @@ export class FileStorage implements IStorage {
     }
   }
 
-  // Uninstall Requests
-  async incrementUninstallCount(programName: string): Promise<UninstallRequest> {
+  private async ensureChannel(channelId: string): Promise<void> {
     await this.ensureLoaded();
+    if (!this.data!.channels[channelId]) {
+      this.data!.channels[channelId] = { id: channelId, name: channelId, isDefault: Object.keys(this.data!.channels).length === 0 };
+    }
+    if (!this.data!.uninstallRequests[channelId]) this.data!.uninstallRequests[channelId] = {};
+    if (!this.data!.bosses[channelId]) this.data!.bosses[channelId] = {};
+  }
+
+  // Uninstall Requests
+  async incrementUninstallCount(channelId: string, programName: string): Promise<UninstallRequest> {
+    await this.ensureChannel(channelId);
     const normalizedName = programName.toLowerCase().trim();
-    const existing = this.data!.uninstallRequests[normalizedName];
+    const existing = this.data!.uninstallRequests[channelId][normalizedName];
 
     if (existing) {
       existing.count++;
-      this.data!.uninstallRequests[normalizedName] = existing;
+      this.data!.uninstallRequests[channelId][normalizedName] = existing;
     } else {
       const newRequest: UninstallRequest = {
         id: crypto.randomUUID(),
         programName: programName.trim(),
         count: 1,
       };
-      this.data!.uninstallRequests[normalizedName] = newRequest;
+      this.data!.uninstallRequests[channelId][normalizedName] = newRequest;
     }
 
     await writeData(this.data!);
-    return this.data!.uninstallRequests[normalizedName];
+    return this.data!.uninstallRequests[channelId][normalizedName];
   }
 
-  async getAllUninstallRequests(): Promise<UninstallRequest[]> {
-    await this.ensureLoaded();
-    return Object.values(this.data!.uninstallRequests).sort((a, b) => b.count - a.count);
+  async getAllUninstallRequests(channelId: string): Promise<UninstallRequest[]> {
+    await this.ensureChannel(channelId);
+    return Object.values(this.data!.uninstallRequests[channelId]).sort((a, b) => b.count - a.count);
   }
 
-  async getUninstallRequest(programName: string): Promise<UninstallRequest | undefined> {
-    await this.ensureLoaded();
-    return this.data!.uninstallRequests[programName.toLowerCase().trim()];
-  }
-
-  async resetAllRequests(): Promise<void> {
-    await this.ensureLoaded();
-    this.data!.uninstallRequests = {};
+  async resetAllRequests(channelId: string): Promise<void> {
+    await this.ensureChannel(channelId);
+    this.data!.uninstallRequests[channelId] = {};
     await writeData(this.data!);
   }
 
-  async deleteRequest(programName: string): Promise<boolean> {
-    await this.ensureLoaded();
+  async deleteRequest(channelId: string, programName: string): Promise<boolean> {
+    await this.ensureChannel(channelId);
     const normalizedName = programName.toLowerCase().trim();
-    if (this.data!.uninstallRequests[normalizedName]) {
-      delete this.data!.uninstallRequests[normalizedName];
+    if (this.data!.uninstallRequests[channelId][normalizedName]) {
+      delete this.data!.uninstallRequests[channelId][normalizedName];
       await writeData(this.data!);
       return true;
     }
     return false;
   }
 
-  // Players
-  async getPlayers(): Promise<Player[]> {
+  // Channels
+  async getChannels(): Promise<Player[]> {
     await this.ensureLoaded();
-    return Object.values(this.data!.players);
+    return Object.values(this.data!.channels);
   }
 
-  async getPlayer(id: string): Promise<Player | undefined> {
+  async getChannel(id: string): Promise<Player | undefined> {
     await this.ensureLoaded();
-    return this.data!.players[id];
+    return this.data!.channels[id];
   }
 
-  async updatePlayerName(id: string, name: string): Promise<Player> {
-    await this.ensureLoaded();
-    if (!this.data!.players[id]) {
-      this.data!.players[id] = { id, name, isDefault: false };
-    } else {
-      this.data!.players[id].name = name;
-    }
+  async updateChannelName(id: string, name: string): Promise<Player> {
+    await this.ensureChannel(id);
+    this.data!.channels[id].name = name;
     await writeData(this.data!);
-    return this.data!.players[id];
+    return this.data!.channels[id];
   }
 
-  async resetPlayerDeaths(id: string): Promise<void> {
-    await this.ensureLoaded();
-    const bossesToDelete = Object.keys(this.data!.bosses).filter(key => this.data!.bosses[key].playerId === id);
-    bossesToDelete.forEach(key => delete this.data!.bosses[key]);
+  async resetChannelDeaths(id: string): Promise<void> {
+    await this.ensureChannel(id);
+    this.data!.bosses[id] = {};
     await writeData(this.data!);
   }
 
   // Death Counter
-  async getBoss(name: string, playerId: string): Promise<Boss | undefined> {
-    await this.ensureLoaded();
-    return Object.values(this.data!.bosses).find(b => b.name.toLowerCase().trim() === name.toLowerCase().trim() && b.playerId === playerId);
+  async getBoss(channelId: string, name: string): Promise<Boss | undefined> {
+    await this.ensureChannel(channelId);
+    return Object.values(this.data!.bosses[channelId]).find(b => b.name.toLowerCase().trim() === name.toLowerCase().trim());
   }
 
-  async getActiveBoss(playerId: string): Promise<Boss | undefined> {
-    await this.ensureLoaded();
-    return Object.values(this.data!.bosses).find(b => !b.isBeaten && b.playerId === playerId);
+  async getActiveBoss(channelId: string): Promise<Boss | undefined> {
+    await this.ensureChannel(channelId);
+    return Object.values(this.data!.bosses[channelId]).find(b => !b.isBeaten);
   }
 
-  async upsertBoss(name: string, playerId: string): Promise<Boss> {
-    await this.ensureLoaded();
-    const normalizedName = `${playerId}_${name.toLowerCase().trim()}`;
-    if (!this.data!.bosses[normalizedName]) {
-      this.data!.bosses[normalizedName] = {
+  async upsertBoss(channelId: string, name: string): Promise<Boss> {
+    await this.ensureChannel(channelId);
+    const normalizedName = name.toLowerCase().trim();
+    if (!this.data!.bosses[channelId][normalizedName]) {
+      this.data!.bosses[channelId][normalizedName] = {
         id: crypto.randomUUID(),
         name: name.trim(),
         isBeaten: false,
         deathCount: 0,
         finalDeathCount: null,
-        playerId
+        playerId: channelId
       };
       await writeData(this.data!);
     }
-    return this.data!.bosses[normalizedName];
+    return this.data!.bosses[channelId][normalizedName];
   }
 
-  async incrementDeaths(playerId: string, bossName?: string): Promise<Boss> {
-    await this.ensureLoaded();
+  async incrementDeaths(channelId: string, bossName?: string): Promise<Boss> {
+    await this.ensureChannel(channelId);
     let boss: Boss | undefined;
     if (bossName) {
-      boss = await this.upsertBoss(bossName, playerId);
+      boss = await this.upsertBoss(channelId, bossName);
     } else {
-      boss = await this.getActiveBoss(playerId);
+      boss = await this.getActiveBoss(channelId);
     }
 
-    if (!boss) throw new Error("No active boss and no boss name provided");
+    if (!boss) throw new Error("No active boss");
 
     boss.deathCount++;
-    const key = `${playerId}_${boss.name.toLowerCase().trim()}`;
-    this.data!.bosses[key] = boss;
+    this.data!.bosses[channelId][boss.name.toLowerCase().trim()] = boss;
     await writeData(this.data!);
     return boss;
   }
 
-  async setDeaths(playerId: string, bossName: string, count: number): Promise<Boss> {
-    await this.ensureLoaded();
-    const boss = await this.upsertBoss(bossName, playerId);
+  async setDeaths(channelId: string, bossName: string, count: number): Promise<Boss> {
+    await this.ensureChannel(channelId);
+    const boss = await this.upsertBoss(channelId, bossName);
     boss.deathCount = count;
-    const key = `${playerId}_${boss.name.toLowerCase().trim()}`;
-    this.data!.bosses[key] = boss;
+    this.data!.bosses[channelId][boss.name.toLowerCase().trim()] = boss;
     await writeData(this.data!);
     return boss;
   }
 
-  async markBeaten(playerId: string, bossName?: string): Promise<Boss> {
-    await this.ensureLoaded();
+  async markBeaten(channelId: string, bossName?: string): Promise<Boss> {
+    await this.ensureChannel(channelId);
     let boss: Boss | undefined;
     if (bossName) {
-      boss = await this.getBoss(bossName, playerId);
+      boss = this.data!.bosses[channelId][bossName.toLowerCase().trim()];
     } else {
-      boss = await this.getActiveBoss(playerId);
+      boss = await this.getActiveBoss(channelId);
     }
 
     if (!boss) throw new Error("Boss not found");
 
     boss.isBeaten = true;
     boss.finalDeathCount = boss.deathCount;
-    const key = `${playerId}_${boss.name.toLowerCase().trim()}`;
-    this.data!.bosses[key] = boss;
+    this.data!.bosses[channelId][boss.name.toLowerCase().trim()] = boss;
     await writeData(this.data!);
     return boss;
   }
 
-  async getAllBosses(playerId: string): Promise<Boss[]> {
-    await this.ensureLoaded();
-    return Object.values(this.data!.bosses).filter(b => b.playerId === playerId);
+  async getAllBosses(channelId: string): Promise<Boss[]> {
+    await this.ensureChannel(channelId);
+    return Object.values(this.data!.bosses[channelId]);
   }
 }
 
@@ -234,42 +226,43 @@ export const storage = new FileStorage();
 
 // --- Routes Logic ---
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Player Endpoints
-  app.get("/api/players", async (req, res) => {
+  // Channel Endpoints
+  app.get("/api/channels", async (req, res) => {
     try {
-      const players = await storage.getPlayers();
-      res.json(players);
+      const channels = await storage.getChannels();
+      res.json(channels);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch players" });
+      res.status(500).json({ error: "Failed to fetch channels" });
     }
   });
 
-  app.post("/api/players/:id", async (req, res) => {
+  app.post("/api/channels/:id", async (req, res) => {
     try {
-      const player = await storage.updatePlayerName(req.params.id, req.body.name);
-      res.json(player);
+      const channel = await storage.updateChannelName(req.params.id, req.body.name);
+      res.json(channel);
     } catch (error) {
-      res.status(500).json({ error: "Failed to update player" });
+      res.status(500).json({ error: "Failed to update channel" });
     }
   });
 
-  app.delete("/api/players/:id/reset", async (req, res) => {
+  app.delete("/api/channels/:id/reset", async (req, res) => {
     try {
-      await storage.resetPlayerDeaths(req.params.id);
+      await storage.resetChannelDeaths(req.params.id);
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ error: "Failed to reset player deaths" });
+      res.status(500).json({ error: "Failed to reset channel deaths" });
     }
   });
 
   // Uninstall Endpoints
   app.get("/api/uninstall", async (req, res) => {
     const program = req.query.program as string;
+    const channelId = (req.query.channel as string) || "default";
     if (!program || typeof program !== 'string' || program.trim() === '') {
       return res.status(400).json({ error: "Program name is required" });
     }
     try {
-      const result = await storage.incrementUninstallCount(program);
+      const result = await storage.incrementUninstallCount(channelId, program);
       const message = `Chat has requested to uninstall ${result.programName} ${result.count} ${result.count === 1 ? 'time' : 'times'}. Go ahead and do it already!`;
       res.type('text/plain').send(message);
     } catch (error) {
@@ -278,8 +271,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/uninstall/all", async (req, res) => {
+    const channelId = (req.query.channel as string) || "default";
     try {
-      const requests = await storage.getAllUninstallRequests();
+      const requests = await storage.getAllUninstallRequests(channelId);
       res.json(requests);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch requests" });
@@ -289,11 +283,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Death Counter Endpoints
   app.get("/api/death", async (req, res) => {
     const bossName = req.query.boss as string;
-    const playerToken = (req.query.player as string) || "default";
+    const channelId = (req.query.channel as string) || "default";
     try {
-      const player = await storage.getPlayer(playerToken);
-      const boss = await storage.incrementDeaths(playerToken, bossName);
-      res.type('text/plain').send(`${player?.name || "Player"} has died to ${boss.name} ${boss.deathCount} ${boss.deathCount === 1 ? 'time' : 'times'}`);
+      const channel = await storage.getChannel(channelId);
+      const boss = await storage.incrementDeaths(channelId, bossName);
+      res.type('text/plain').send(`${channel?.name || channelId} has died to ${boss.name} ${boss.deathCount} ${boss.deathCount === 1 ? 'time' : 'times'}`);
     } catch (error) {
       res.status(400).type('text/plain').send("No active boss found. Use !death <boss name> to start tracking.");
     }
@@ -301,22 +295,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/deaths", async (req, res) => {
     const bossName = req.query.boss as string;
-    const playerToken = (req.query.player as string) || "default";
+    const channelId = (req.query.channel as string) || "default";
     try {
-      const player = await storage.getPlayer(playerToken);
+      const channel = await storage.getChannel(channelId);
       if (bossName) {
-        const boss = await storage.getBoss(bossName, playerToken);
+        const boss = await storage.getBoss(channelId, bossName);
         if (!boss) return res.type('text/plain').send(`No death records found for ${bossName}`);
         
         if (boss.isBeaten) {
-          return res.type('text/plain').send(`It took ${boss.finalDeathCount} attempts for ${player?.name || "Player"} to beat ${boss.name}`);
+          return res.type('text/plain').send(`It took ${boss.finalDeathCount} attempts for ${channel?.name || channelId} to beat ${boss.name}`);
         } else {
-          return res.type('text/plain').send(`${player?.name || "Player"} has died to ${boss.name} ${boss.deathCount} times`);
+          return res.type('text/plain').send(`${channel?.name || channelId} has died to ${boss.name} ${boss.deathCount} times`);
         }
       } else {
-        const boss = await storage.getActiveBoss(playerToken);
+        const boss = await storage.getActiveBoss(channelId);
         if (!boss) return res.type('text/plain').send("No active boss is currently being tracked.");
-        res.type('text/plain').send(`${player?.name || "Player"} has died to ${boss.name} ${boss.deathCount} times`);
+        res.type('text/plain').send(`${channel?.name || channelId} has died to ${boss.name} ${boss.deathCount} times`);
       }
     } catch (error) {
       res.status(500).type('text/plain').send("Failed to fetch death records");
@@ -325,23 +319,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/beaten", async (req, res) => {
     const bossName = req.query.boss as string;
-    const playerToken = (req.query.player as string) || "default";
+    const channelId = (req.query.channel as string) || "default";
     try {
-      const player = await storage.getPlayer(playerToken);
-      const boss = await storage.markBeaten(playerToken, bossName);
-      res.type('text/plain').send(`It took ${boss.finalDeathCount} attempts for ${player?.name || "Player"} to beat ${boss.name}`);
+      const channel = await storage.getChannel(channelId);
+      const boss = await storage.markBeaten(channelId, bossName);
+      res.type('text/plain').send(`It took ${boss.finalDeathCount} attempts for ${channel?.name || channelId} to beat ${boss.name}`);
     } catch (error) {
       res.status(400).type('text/plain').send("No active boss found to mark as beaten.");
     }
   });
 
   app.get("/api/total-deaths", async (req, res) => {
-    const playerToken = (req.query.player as string) || "default";
+    const channelId = (req.query.channel as string) || "default";
     try {
-      const player = await storage.getPlayer(playerToken);
-      const bosses = await storage.getAllBosses(playerToken);
+      const channel = await storage.getChannel(channelId);
+      const bosses = await storage.getAllBosses(channelId);
       const total = bosses.reduce((acc, b) => acc + b.deathCount, 0);
-      res.type('text/plain').send(`${player?.name || "Player"} has died a total of ${total} times across all bosses`);
+      res.type('text/plain').send(`${channel?.name || channelId} has died a total of ${total} times across all bosses`);
     } catch (error) {
       res.status(500).type('text/plain').send("Failed to calculate total deaths");
     }
@@ -349,13 +343,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/setdeaths", async (req, res) => {
     const bossName = req.query.boss as string;
-    const playerToken = (req.query.player as string) || "default";
+    const channelId = (req.query.channel as string) || "default";
     const count = parseInt(req.query.count as string);
     if (!bossName || isNaN(count)) {
       return res.status(400).type('text/plain').send("Usage: !setdeaths <boss name> <count>");
     }
     try {
-      const boss = await storage.setDeaths(playerToken, bossName, count);
+      const boss = await storage.setDeaths(channelId, bossName, count);
       res.type('text/plain').send(`Death counter for ${boss.name} set to ${boss.deathCount}`);
     } catch (error) {
       res.status(500).type('text/plain').send("Failed to update death counter");
@@ -363,9 +357,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/bosses", async (req, res) => {
-    const playerToken = (req.query.player as string) || "default";
+    const channelId = (req.query.channel as string) || "default";
     try {
-      const bosses = await storage.getAllBosses(playerToken);
+      const bosses = await storage.getAllBosses(channelId);
       res.json(bosses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch bosses" });
