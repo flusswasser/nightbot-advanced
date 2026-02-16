@@ -30,7 +30,7 @@ function ApiInfo({ type }: { type: 'uninstall' | 'death' }) {
     if (type === 'uninstall') {
       const apiUrl = `${window.location.origin}/api/uninstall?program=$(query)`;
       return [
-        { name: '!uninstall', url: apiUrl, response: "Chat has requested to uninstall Windows Vista 5 times. Go ahead and do it already!" }
+        { name: '!uninstall', url: apiUrl, description: "Track program uninstalls" }
       ];
     } else {
       return [
@@ -63,7 +63,7 @@ function ApiInfo({ type }: { type: 'uninstall' | 'death' }) {
           <div key={cmd.name} className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold">{cmd.name}</p>
-              {cmd.description && <p className="text-xs text-muted-foreground">{cmd.description}</p>}
+              {"description" in cmd && <p className="text-xs text-muted-foreground">{cmd.description}</p>}
             </div>
             <div className="bg-muted p-2 rounded-md flex items-center gap-2">
               <code className="text-xs font-mono break-all flex-1">
