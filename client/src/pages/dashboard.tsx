@@ -15,68 +15,157 @@ import {
   AlertDialogTrigger 
 } from "@/components/ui/alert-dialog";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, Trash2, Copy, Check, Terminal, TrendingUp } from "lucide-react";
+import { Loader2, Trash2, Copy, Check, Terminal, Skull, Trophy, ListOrdered } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { UninstallRequest } from "@shared/schema";
+import type { UninstallRequest, Boss } from "@shared/schema";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // --- API Info Component ---
-function ApiInfo() {
+function ApiInfo({ type }: { type: 'uninstall' | 'death' }) {
   const [copied, setCopied] = useState(false);
-  const apiUrl = `${window.location.origin}/api/uninstall?program=$(query)`;
+  const { toast } = useToast();
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(apiUrl);
+  const getCommands = () => {
+    if (type === 'uninstall') {
+      const apiUrl = `${window.location.origin}/api/uninstall?program=$(query)`;
+      return [
+        { name: '!uninstall', url: apiUrl, response: "Chat has requested to uninstall Windows Vista 5 times. Go ahead and do it already!" }
+      ];
+    } else {
+      return [
+        { name: '!death', url: `${window.location.origin}/api/death?boss=$(query)`, description: "Add death to boss (provide name to change boss)" },
+        { name: '!deaths', url: `${window.location.origin}/api/deaths?boss=$(query)`, description: "Show current boss deaths or specific boss stats" },
+        { name: '!beaten', url: `${window.location.origin}/api/beaten?boss=$(query)`, description: "Mark boss as beaten" },
+        { name: '!totaldeaths', url: `${window.location.origin}/api/total-deaths`, description: "Total deaths across all bosses" },
+        { name: '!setdeaths', url: `${window.location.origin}/api/setdeaths?boss=$(1)&count=$(2)`, description: "Manually set death count" }
+      ];
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
     setCopied(true);
+    toast({ title: "Copied!", description: "Command copied to clipboard" });
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <Card data-testid="card-api-info">
+    <Card data-testid={`card-api-info-${type}`}>
       <CardHeader>
-        <CardTitle>Nightbot Setup Instructions</CardTitle>
+        <CardTitle>{type === 'uninstall' ? 'Uninstall Tracker' : 'Death Counter'} Nightbot Setup</CardTitle>
         <CardDescription>
-          Use this API endpoint in your Nightbot custom command
+          Commands to add to your Nightbot
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div>
-          <p className="text-sm font-medium mb-2">Command Name:</p>
-          <code className="block bg-muted p-3 rounded-md text-sm font-mono">
-            !uninstall
-          </code>
-        </div>
-        <div>
-          <p className="text-sm font-medium mb-2">Command Response:</p>
-          <div className="bg-muted p-3 rounded-md">
-            <code className="text-sm font-mono break-all">
-              $(urlfetch {apiUrl})
-            </code>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-2"
-              onClick={copyToClipboard}
-              data-testid="button-copy"
-            >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
+        {getCommands().map((cmd) => (
+          <div key={cmd.name} className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold">{cmd.name}</p>
+              {cmd.description && <p className="text-xs text-muted-foreground">{cmd.description}</p>}
+            </div>
+            <div className="bg-muted p-2 rounded-md flex items-center gap-2">
+              <code className="text-xs font-mono break-all flex-1">
+                $(urlfetch {cmd.url})
+              </code>
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => copyToClipboard(`$(urlfetch ${cmd.url})`)}>
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="text-sm text-muted-foreground space-y-2">
-          <p>
-            <strong>Usage in Twitch chat:</strong> !uninstall Windows Vista
-          </p>
-          <p>
-            <strong>Response:</strong> Chat has requested to uninstall Windows Vista 5 times. Go ahead and do it already!
-          </p>
-        </div>
+        ))}
       </CardContent>
     </Card>
   );
 }
 
-// --- Uninstall Tester Component ---
+// --- Death Counter Dashboard ---
+function DeathCounter() {
+  const { data: bosses, isLoading } = useQuery<Boss[]>({ queryKey: ['/api/bosses'] });
+  
+  return (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-2 gap-6">
+        <ApiInfo type="death" />
+        <Card>
+          <CardHeader>
+            <CardTitle>Current Status</CardTitle>
+            <CardDescription>Active boss tracking</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? <Loader2 className="animate-spin" /> : (
+              <div className="space-y-4">
+                {bosses?.filter(b => !b.isBeaten).map(boss => (
+                  <div key={boss.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                    <div>
+                      <p className="text-lg font-bold">{boss.name}</p>
+                      <p className="text-sm text-muted-foreground">Currently Fighting</p>
+                    </div>
+                    <div className="text-3xl font-black text-primary">{boss.deathCount}</div>
+                  </div>
+                ))}
+                {!bosses?.some(b => !b.isBeaten) && (
+                  <div className="text-center py-8 text-muted-foreground italic">
+                    No active boss. Use !death &lt;name&gt; in chat to start one!
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Hall of Shame (Boss History)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Boss Name</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Deaths</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {bosses?.sort((a,b) => b.deathCount - a.deathCount).map((boss) => (
+                <TableRow key={boss.id}>
+                  <TableCell className="font-medium">{boss.name}</TableCell>
+                  <TableCell>
+                    {boss.isBeaten ? (
+                      <span className="flex items-center gap-1 text-green-500 font-bold">
+                        <Trophy className="h-4 w-4" /> Beaten
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-red-500">
+                        <Skull className="h-4 w-4" /> Active
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-lg">{boss.deathCount}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// --- Uninstall Tracker Components ---
+function UninstallTracker() {
+  return (
+    <div className="space-y-6">
+      <ApiInfo type="uninstall" />
+      <UninstallTester />
+      <RequestsTable />
+    </div>
+  );
+}
+
 function UninstallTester() {
   const [program, setProgram] = useState("");
   const [response, setResponse] = useState("");
@@ -85,275 +174,87 @@ function UninstallTester() {
   const mutation = useMutation({
     mutationFn: async (programName: string) => {
       const res = await fetch(`/api/uninstall?program=${encodeURIComponent(programName)}`);
-      if (!res.ok) throw new Error("Failed to process request");
+      if (!res.ok) throw new Error("Failed");
       return res.text();
     },
     onSuccess: (data) => {
       setResponse(data);
       queryClient.invalidateQueries({ queryKey: ['/api/uninstall/all'] });
-      toast({
-        title: "Success",
-        description: "Uninstall request tracked",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to process request",
-        variant: "destructive",
-      });
-    },
+    }
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (program.trim()) {
-      mutation.mutate(program);
-    }
-  };
-
   return (
-    <Card data-testid="card-tester">
-      <CardHeader>
-        <CardTitle>Test Nightbot Command</CardTitle>
-        <CardDescription>
-          Simulate the !uninstall command by entering a program name
-        </CardDescription>
-      </CardHeader>
+    <Card>
+      <CardHeader><CardTitle>Test !uninstall</CardTitle></CardHeader>
       <CardContent className="space-y-4">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Input
-            placeholder="e.g., Windows Vista"
-            value={program}
-            onChange={(e) => setProgram(e.target.value)}
-            data-testid="input-program"
-            disabled={mutation.isPending}
-          />
-          <Button 
-            type="submit" 
-            disabled={!program.trim() || mutation.isPending}
-            data-testid="button-submit"
-          >
-            {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Test
-          </Button>
+        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); mutation.mutate(program); }}>
+          <Input placeholder="Program name..." value={program} onChange={e => setProgram(e.target.value)} />
+          <Button type="submit" disabled={mutation.isPending}>Test</Button>
         </form>
-        {response && (
-          <div className="rounded-md bg-muted p-4" data-testid="text-response">
-            <p className="text-sm font-mono">{response}</p>
-          </div>
-        )}
+        {response && <div className="p-3 bg-muted rounded font-mono text-sm">{response}</div>}
       </CardContent>
     </Card>
   );
 }
 
-// --- Requests Table Row Component ---
-function RequestRow({ request, index }: { request: UninstallRequest; index: number }) {
-  const { toast } = useToast();
-  
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest('DELETE', `/api/uninstall/${encodeURIComponent(request.programName)}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/uninstall/all'] });
-      toast({
-        title: "Success",
-        description: `Deleted request for ${request.programName}`,
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to delete request",
-        variant: "destructive",
-      });
-    },
-  });
-
-  return (
-    <TableRow data-testid={`row-request-${index}`}>
-      <TableCell className="font-medium text-muted-foreground">
-        {index + 1}
-      </TableCell>
-      <TableCell className="font-medium" data-testid={`text-program-${index}`}>
-        {request.programName}
-      </TableCell>
-      <TableCell className="text-right font-bold" data-testid={`text-count-${index}`}>
-        {request.count}
-      </TableCell>
-      <TableCell>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              data-testid={`button-delete-${index}`}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this request?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete the uninstall request for "{request.programName}". This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel data-testid={`button-cancel-delete-${index}`}>Cancel</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={() => deleteMutation.mutate()}
-                data-testid={`button-confirm-delete-${index}`}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </TableCell>
-    </TableRow>
-  );
-}
-
-// --- Requests Table Component ---
 function RequestsTable() {
-  const { toast } = useToast();
-  const { data: requests, isLoading } = useQuery<UninstallRequest[]>({
-    queryKey: ['/api/uninstall/all'],
-  });
-
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest('DELETE', '/api/uninstall/reset');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/uninstall/all'] });
-      toast({
-        title: "Success",
-        description: "All uninstall requests have been reset",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to reset requests",
-        variant: "destructive",
-      });
-    },
-  });
-
+  const { data: requests, isLoading } = useQuery<UninstallRequest[]>({ queryKey: ['/api/uninstall/all'] });
   return (
-    <Card data-testid="card-requests">
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <CardTitle>Uninstall Requests Leaderboard</CardTitle>
-            <CardDescription>
-              Programs sorted by number of uninstall requests
-            </CardDescription>
-          </div>
-          {requests && requests.length > 0 && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button 
-                  variant="destructive" 
-                  size="sm"
-                  data-testid="button-reset"
-                  disabled={resetMutation.isPending}
-                >
-                  {resetMutation.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="mr-2 h-4 w-4" />
-                  )}
-                  Reset All
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete all uninstall request data. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel data-testid="button-cancel">Cancel</AlertDialogCancel>
-                  <AlertDialogAction 
-                    onClick={() => resetMutation.mutate()}
-                    data-testid="button-confirm"
-                  >
-                    Reset All Data
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </div>
-      </CardHeader>
+    <Card>
+      <CardHeader><CardTitle>Leaderboard</CardTitle></CardHeader>
       <CardContent>
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : requests && requests.length > 0 ? (
+        {isLoading ? <Loader2 className="animate-spin mx-auto" /> : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">#</TableHead>
-                <TableHead>Program Name</TableHead>
+                <TableHead>#</TableHead>
+                <TableHead>Program</TableHead>
                 <TableHead className="text-right">Requests</TableHead>
-                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {requests.map((request, index) => (
-                <RequestRow 
-                  key={request.id} 
-                  request={request} 
-                  index={index}
-                />
+              {requests?.map((r, i) => (
+                <TableRow key={r.id}>
+                  <TableCell>{i + 1}</TableCell>
+                  <TableCell>{r.programName}</TableCell>
+                  <TableCell className="text-right">{r.count}</TableCell>
+                </TableRow>
               ))}
             </TableBody>
           </Table>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            No requests yet. Try testing the command above!
-          </div>
         )}
       </CardContent>
     </Card>
   );
 }
 
-// --- Main Dashboard Page ---
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Terminal className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold" data-testid="text-title">
-              Nightbot Uninstall Tracker
-            </h1>
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Terminal className="h-10 w-10 text-primary" />
+            <div>
+              <h1 className="text-3xl font-black tracking-tighter">MANGO'S TRACKER</h1>
+              <p className="text-muted-foreground text-sm uppercase tracking-widest">Twitch Community Tools</p>
+            </div>
           </div>
-          <p className="text-muted-foreground">
-            Track and display community uninstall requests for your Twitch chat
-          </p>
         </div>
 
-        <div className="grid gap-6">
-          <ApiInfo />
-          <UninstallTester />
-          <RequestsTable />
-        </div>
+        <Tabs defaultValue="deaths" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="deaths" className="flex items-center gap-2">
+              <Skull className="h-4 w-4" /> Death Counter
+            </TabsTrigger>
+            <TabsTrigger value="uninstall" className="flex items-center gap-2">
+              <ListOrdered className="h-4 w-4" /> Uninstall Tracker
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="deaths"><DeathCounter /></TabsContent>
+          <TabsContent value="uninstall"><UninstallTracker /></TabsContent>
+        </Tabs>
       </div>
     </div>
   );
