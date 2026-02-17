@@ -17,6 +17,7 @@ export interface IStorage {
   getChannel(id: string): Promise<Player | undefined>;
   updateChannelName(id: string, name: string): Promise<Player>;
   resetChannelDeaths(id: string): Promise<void>;
+  deleteChannel(id: string): Promise<void>;
 
   // Death Counter (Isolated by Channel)
   getBoss(channelId: string, name: string): Promise<Boss | undefined>;
@@ -144,6 +145,16 @@ export class FileStorage implements IStorage {
     await writeData(this.data!);
   }
 
+  async deleteChannel(id: string): Promise<void> {
+    await this.ensureLoaded();
+    if (this.data!.channels[id]) {
+      delete this.data!.channels[id];
+      delete this.data!.uninstallRequests[id];
+      delete this.data!.bosses[id];
+      await writeData(this.data!);
+    }
+  }
+
   // Death Counter
   async getBoss(channelId: string, name: string): Promise<Boss | undefined> {
     await this.ensureChannel(channelId);
@@ -242,6 +253,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(channel);
     } catch (error) {
       res.status(500).json({ error: "Failed to update channel" });
+    }
+  });
+
+  app.delete("/api/channels/:id", async (req, res) => {
+    try {
+      await storage.deleteChannel(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete channel" });
     }
   });
 

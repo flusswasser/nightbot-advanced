@@ -32,15 +32,45 @@ function ApiInfo({ type, channel }: { type: 'uninstall' | 'death', channel: Chan
     if (type === 'uninstall') {
       const apiUrl = `${window.location.origin}/api/uninstall?program=$(query)${channelParam}`;
       return [
-        { name: '!uninstall', url: apiUrl, description: "Track program uninstalls" }
+        { 
+          name: '!uninstall', 
+          url: apiUrl, 
+          description: "Track program uninstalls",
+          syntax: "!uninstall <program name>" 
+        }
       ];
     } else {
       return [
-        { name: '!death', url: `${window.location.origin}/api/death?boss=$(query)${channelParam}`, description: "Add death to boss" },
-        { name: '!deaths', url: `${window.location.origin}/api/deaths?boss=$(query)${channelParam}`, description: "Show deaths stats" },
-        { name: '!beaten', url: `${window.location.origin}/api/beaten?boss=$(query)${channelParam}`, description: "Mark boss as beaten" },
-        { name: '!totaldeaths', url: `${window.location.origin}/api/total-deaths?channel=$(channel)`, description: "Total deaths" },
-        { name: '!setdeaths', url: `${window.location.origin}/api/setdeaths?boss=$(1)&count=$(2)${channelParam}`, description: "Manually set deaths" }
+        { 
+          name: '!death', 
+          url: `${window.location.origin}/api/death?boss=$(query)${channelParam}`, 
+          description: "Add death to boss",
+          syntax: "!death <boss name>" 
+        },
+        { 
+          name: '!deaths', 
+          url: `${window.location.origin}/api/deaths?boss=$(query)${channelParam}`, 
+          description: "Show deaths stats",
+          syntax: "!deaths [boss name]" 
+        },
+        { 
+          name: '!beaten', 
+          url: `${window.location.origin}/api/beaten?boss=$(query)${channelParam}`, 
+          description: "Mark boss as beaten",
+          syntax: "!beaten [boss name]" 
+        },
+        { 
+          name: '!totaldeaths', 
+          url: `${window.location.origin}/api/total-deaths?channel=$(channel)`, 
+          description: "Total deaths",
+          syntax: "!totaldeaths" 
+        },
+        { 
+          name: '!setdeaths', 
+          url: `${window.location.origin}/api/setdeaths?boss=$(1)&count=$(2)${channelParam}`, 
+          description: "Manually set deaths",
+          syntax: "!setdeaths <boss name> <count>" 
+        }
       ];
     }
   };
@@ -64,7 +94,10 @@ function ApiInfo({ type, channel }: { type: 'uninstall' | 'death', channel: Chan
         {getCommands().map((cmd) => (
           <div key={cmd.name} className="space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold">{cmd.name}</p>
+              <div className="space-y-1">
+                <p className="text-sm font-bold">{cmd.name}</p>
+                {"syntax" in cmd && <p className="text-[10px] font-mono text-primary bg-primary/5 px-2 py-0.5 rounded-sm inline-block">{cmd.syntax}</p>}
+              </div>
               <p className="text-xs text-muted-foreground">{cmd.description}</p>
             </div>
             <div className="bg-muted p-2 rounded-md flex items-center gap-2">
@@ -97,6 +130,16 @@ function ChannelSettings({ channel }: { channel: Channel }) {
     }
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('DELETE', `/api/channels/${channel.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/channels'] });
+      toast({ title: "Channel Deleted", description: "All data for this channel has been removed" });
+    }
+  });
+
   const resetMutation = useMutation({
     mutationFn: async () => {
       return await apiRequest('DELETE', `/api/channels/${channel.id}/reset`);
@@ -125,24 +168,46 @@ function ChannelSettings({ channel }: { channel: Channel }) {
           </div>
         </div>
         
-        <div className="pt-4 border-t">
+        <div className="pt-4 border-t grid grid-cols-2 gap-2">
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" className="w-full" disabled={resetMutation.isPending}>
-                <Trash2 className="mr-2 h-4 w-4" /> Reset Channel Deaths
+              <Button variant="outline" size="sm" className="w-full" disabled={resetMutation.isPending}>
+                <Trash2 className="mr-2 h-4 w-4" /> Reset Deaths
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogTitle>Reset Deaths?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will permanently delete all death records for the channel "{channel.id}". This cannot be undone.
+                  This will clear all death records for "{channel.id}". History will be lost.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={() => resetMutation.mutate()} className="bg-destructive text-destructive-foreground">
-                  Reset Data
+                  Reset
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" className="w-full" disabled={deleteMutation.isPending}>
+                <Trash2 className="mr-2 h-4 w-4" /> Delete Account
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Account?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete the channel "{channel.id}" and ALL its data (deaths and uninstalls).
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => deleteMutation.mutate()} className="bg-destructive text-destructive-foreground">
+                  Delete
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
