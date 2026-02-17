@@ -28,7 +28,7 @@ function ApiInfo({ type, channel }: { type: 'uninstall' | 'death', channel: Chan
   const { toast } = useToast();
 
   const getCommands = () => {
-    const channelParam = `&channel=${channel.id}`;
+    const channelParam = `&channel=$(channel)`;
     if (type === 'uninstall') {
       const apiUrl = `${window.location.origin}/api/uninstall?program=$(query)${channelParam}`;
       return [
@@ -39,7 +39,7 @@ function ApiInfo({ type, channel }: { type: 'uninstall' | 'death', channel: Chan
         { name: '!death', url: `${window.location.origin}/api/death?boss=$(query)${channelParam}`, description: "Add death to boss" },
         { name: '!deaths', url: `${window.location.origin}/api/deaths?boss=$(query)${channelParam}`, description: "Show deaths stats" },
         { name: '!beaten', url: `${window.location.origin}/api/beaten?boss=$(query)${channelParam}`, description: "Mark boss as beaten" },
-        { name: '!totaldeaths', url: `${window.location.origin}/api/total-deaths?channel=${channel.id}`, description: "Total deaths" },
+        { name: '!totaldeaths', url: `${window.location.origin}/api/total-deaths?channel=$(channel)`, description: "Total deaths" },
         { name: '!setdeaths', url: `${window.location.origin}/api/setdeaths?boss=$(1)&count=$(2)${channelParam}`, description: "Manually set deaths" }
       ];
     }
