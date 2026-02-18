@@ -11,19 +11,66 @@
       "deathCount": 2,
       "finalDeathCount": null
     },
-    "flusswasser": {},
+    "flusswasser": {
+      "black myth: wukong": {
+        "monkey": {
+          "id": "cd486472-03c4-41a4-aa81-66b374f6ce5d",
+          "name": "monkey",
+          "isBeaten": true,
+          "deathCount": 2,
+          "finalDeathCount": 2,
+          "playerId": "flusswasser",
+          "gameId": "black myth: wukong"
+        },
+        "turtle": {
+          "id": "86a0bb63-548e-4302-80e6-2cedeb19625f",
+          "name": "turtle",
+          "isBeaten": true,
+          "deathCount": 1,
+          "finalDeathCount": 1,
+          "playerId": "flusswasser",
+          "gameId": "black myth: wukong"
+        }
+      },
+      "er": {
+        "godfrey": {
+          "id": "194c5f55-f0b6-49fe-ac84-4ee3cc8171a0",
+          "name": "godfrey",
+          "isBeaten": true,
+          "deathCount": 3,
+          "finalDeathCount": 3,
+          "playerId": "flusswasser",
+          "gameId": "er"
+        }
+      }
+    },
     "imango69": {}
   },
   "channels": {
     "flusswasser": {
       "id": "flusswasser",
       "name": "Fluss",
-      "isDefault": false
+      "isDefault": false,
+      "activeGameId": "er"
     },
     "imango69": {
       "id": "imango69",
       "name": "Mango",
       "isDefault": false
+    }
+  },
+  "games": {
+    "flusswasser": {
+      "black myth: wukong": {
+        "id": "black myth: wukong",
+        "name": "Black Myth: Wukong",
+        "channelId": "flusswasser"
+      },
+      "er": {
+        "id": "er",
+        "name": "ER",
+        "channelId": "flusswasser"
+      }
     }
   }
 }

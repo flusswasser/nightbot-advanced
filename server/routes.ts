@@ -324,15 +324,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Game Endpoints
-  app.get("/api/setgame", async (req, res) => {
+  app.get("/api/newgame", async (req, res) => {
     const gameName = req.query.game as string;
     const channelId = (req.query.channel as string) || "default";
-    if (!gameName) return res.status(400).type('text/plain').send("Usage: !setgame <game name>");
+    if (!gameName) return res.status(400).type('text/plain').send("Usage: !newgame <game name>");
     try {
       const game = await storage.setActiveGame(channelId, gameName);
       res.type('text/plain').send(`Active game set to: ${game.name}. Death counter reset for this game.`);
     } catch (error) {
       res.status(500).type('text/plain').send("Failed to set active game");
+    }
+  });
+
+  app.get("/api/gamebeaten", async (req, res) => {
+    const channelId = (req.query.channel as string) || "default";
+    try {
+      const channel = await storage.getChannel(channelId);
+      const game = await storage.getActiveGame(channelId);
+      if (!game) return res.status(400).type('text/plain').send("No active game set.");
+      const bosses = await storage.getAllBosses(channelId, game.id);
+      const total = bosses.reduce((acc, b) => acc + b.deathCount, 0);
+      res.type('text/plain').send(`${game.name} has been beaten by ${channel?.name || channelId}! Total deaths: ${total}`);
+    } catch (error) {
+      res.status(500).type('text/plain').send("Failed to mark game as beaten");
     }
   });
 
@@ -430,13 +444,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/total-deaths", async (req, res) => {
     const channelId = (req.query.channel as string) || "default";
+    const gameName = req.query.game as string;
     try {
       const channel = await storage.getChannel(channelId);
-      const game = await storage.getActiveGame(channelId);
-      if (!game) return res.status(400).type('text/plain').send("No active game set.");
-      const bosses = await storage.getAllBosses(channelId, game.id);
+      let targetGame: Game | undefined;
+      
+      if (gameName) {
+        const allGames = await storage.getGames(channelId);
+        targetGame = allGames.find(g => g.name.toLowerCase() === gameName.toLowerCase());
+        if (!targetGame) return res.status(404).type('text/plain').send(`Game "${gameName}" not found.`);
+      } else {
+        targetGame = await storage.getActiveGame(channelId);
+        if (!targetGame) return res.status(400).type('text/plain').send("No active game set.");
+      }
+
+      const bosses = await storage.getAllBosses(channelId, targetGame.id);
       const total = bosses.reduce((acc, b) => acc + b.deathCount, 0);
-      res.type('text/plain').send(`${channel?.name || channelId} has died a total of ${total} times in ${game.name}`);
+      res.type('text/plain').send(`${channel?.name || channelId} has died a total of ${total} times in ${targetGame.name}`);
     } catch (error) {
       res.status(500).type('text/plain').send("Failed to calculate total deaths");
     }
