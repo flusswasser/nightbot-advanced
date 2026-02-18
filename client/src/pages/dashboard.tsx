@@ -72,6 +72,12 @@ function ApiInfo({ type, channel }: { type: 'uninstall' | 'death', channel: Chan
           syntax: "!totaldeaths" 
         },
         { 
+          name: '!lifetimedeaths', 
+          url: `${window.location.origin}/api/lifetime-deaths?channel=$(channel)`, 
+          description: "Total deaths across all games",
+          syntax: "!lifetimedeaths" 
+        },
+        { 
           name: '!setdeaths', 
           url: `${window.location.origin}/api/setdeaths?boss=$(1)&count=$(2)${channelParam}`, 
           description: "Manually set deaths",

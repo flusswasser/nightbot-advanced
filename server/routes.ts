@@ -442,6 +442,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/lifetime-deaths", async (req, res) => {
+    const channelId = (req.query.channel as string) || "default";
+    try {
+      const channel = await storage.getChannel(channelId);
+      const allGames = await storage.getGames(channelId);
+      let lifetimeTotal = 0;
+      for (const game of allGames) {
+        const bosses = await storage.getAllBosses(channelId, game.id);
+        lifetimeTotal += bosses.reduce((acc, b) => acc + b.deathCount, 0);
+      }
+      res.type('text/plain').send(`${channel?.name || channelId} has died a total of ${lifetimeTotal} times across all games`);
+    } catch (error) {
+      res.status(500).type('text/plain').send("Failed to calculate lifetime deaths");
+    }
+  });
+
   app.get("/api/setdeaths", async (req, res) => {
     const bossName = req.query.boss as string;
     const channelId = (req.query.channel as string) || "default";
