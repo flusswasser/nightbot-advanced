@@ -230,7 +230,7 @@ async function initializeBot() {
         intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.DirectMessages]
     });
 
-    client.on('ready', () => {
+    client.on('clientReady', () => {
         console.log(`✓ Online: ${client.user.tag}`);
         client.user.setActivity('Eating Cookies', { type: ActivityType.Custom });
         setInterval(checkForLiveStreams, TWITCH_CHECK_INTERVAL);
