@@ -280,7 +280,10 @@ async function initializeBot() {
                     });
                     saveData();
                     await message.reply(`✓ Subscribed to **${channel.snippet.title}**. Current video bookmarked.`);
-                } catch (e) { logError("Manual Sub", e); message.reply('API Error.'); }
+                } catch (e) { 
+                    logError("Manual Sub", e); 
+                    message.reply(`❌ API Error: ${e.response?.data?.error?.message || e.message}`); 
+                }
             }
             else if (command === 'tsub') {
                 const username = args[0];
@@ -317,6 +320,62 @@ async function initializeBot() {
             else if (command === 'subs') {
                 const list = subscriptions.filter(s => s.discordChannelId === message.channelId);
                 await message.reply(list.length ? list.map((s, i) => `${i+1}. **${s.channelName}**`).join('\n') : "No YouTube subs.");
+            }
+            else if (command === 'latestvideo') {
+                const query = args.join(' ');
+                if (!query) return message.reply('Usage: `!latestvideo <channel name>`');
+                
+                try {
+                    // Search for the channel first to get its ID
+                    const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+                        params: {
+                            part: 'snippet',
+                            q: query,
+                            type: 'channel',
+                            maxResults: 1,
+                            key: YOUTUBE_API_KEY
+                        }
+                    });
+
+                    const channel = searchRes.data.items?.[0];
+                    if (!channel) return message.reply(`Could not find a YouTube channel named "${query}".`);
+
+                    const channelId = channel.id.channelId;
+                    const channelTitle = channel.snippet.title;
+
+                    // Get channel details for uploads playlist
+                    const channelRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+                        params: {
+                            part: 'contentDetails',
+                            id: channelId,
+                            key: YOUTUBE_API_KEY
+                        }
+                    });
+
+                    const uploadsPlaylistId = channelRes.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+                    if (!uploadsPlaylistId) return message.reply(`Could not find uploads for **${channelTitle}**.`);
+
+                    // Get latest video
+                    const videoRes = await axios.get('https://www.googleapis.com/youtube/v3/playlistItems', {
+                        params: {
+                            part: 'snippet',
+                            playlistId: uploadsPlaylistId,
+                            maxResults: 1,
+                            key: YOUTUBE_API_KEY
+                        }
+                    });
+
+                    const latestVideo = videoRes.data.items?.[0];
+                    if (!latestVideo) return message.reply(`No videos found for **${channelTitle}**.`);
+
+                    const videoId = latestVideo.snippet.resourceId.videoId;
+                    const videoTitle = latestVideo.snippet.title;
+
+                    await message.reply(`**Latest video from ${channelTitle}:**\n${videoTitle}\nhttps://www.youtube.com/watch?v=${videoId}`);
+                } catch (e) {
+                    logError("LatestVideo Command", e);
+                    await message.reply('❌ An error occurred while fetching the latest video.');
+                }
             }
             else if (command === 'tsubs') {
                 const list = twitchSubscriptions.filter(s => s.discordChannelId === message.channelId);
