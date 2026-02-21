@@ -298,6 +298,17 @@ function DeathCounter({ channel }: { channel: Channel }) {
     }
   });
 
+  const deleteBossMutation = useMutation({
+    mutationFn: async (bossName: string) => {
+      await apiRequest('DELETE', `/api/bosses/${encodeURIComponent(bossName)}?channel=${channel.id}&game=${displayGameId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bosses'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/lifetime-data'] });
+      toast({ title: "Boss Deleted", description: "Boss record has been removed." });
+    }
+  });
+
   const gameTotalDeaths = bosses?.reduce((acc, b) => acc + b.deathCount, 0) || 0;
 
   return (
@@ -479,7 +490,7 @@ function DeathCounter({ channel }: { channel: Channel }) {
                 </TableHeader>
                 <TableBody>
                   {bosses?.sort((a,b) => b.deathCount - a.deathCount).map((boss) => (
-                    <TableRow key={boss.id}>
+                    <TableRow key={boss.id} className="group">
                       <TableCell className="font-bold">{boss.name}</TableCell>
                       <TableCell>
                         {boss.isBeaten ? (
@@ -492,7 +503,35 @@ function DeathCounter({ channel }: { channel: Channel }) {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right font-black text-lg">{boss.deathCount}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-4">
+                          <span className="font-black text-lg">{boss.deathCount}</span>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete {boss.name}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently remove this boss record from {games?.find(g => g.id === displayGameId)?.name}.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => deleteBossMutation.mutate(boss.name)}
+                                  className="bg-destructive text-destructive-foreground"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {(!bosses || bosses.length === 0) && (

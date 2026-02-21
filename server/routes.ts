@@ -179,6 +179,15 @@ export class FileStorage implements IStorage {
     }
   }
 
+  async deleteBoss(channelId: string, gameId: string, bossName: string): Promise<void> {
+    await this.ensureChannel(channelId);
+    const normalizedBossName = bossName.toLowerCase().trim();
+    if (this.data!.bosses[channelId][gameId] && this.data!.bosses[channelId][gameId][normalizedBossName]) {
+      delete this.data!.bosses[channelId][gameId][normalizedBossName];
+      await writeData(this.data!);
+    }
+  }
+
   async setActiveGame(channelId: string, gameName: string): Promise<Game> {
     await this.ensureChannel(channelId);
     const normalizedGameName = gameName.toLowerCase().trim();
@@ -528,6 +537,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(bosses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch bosses" });
+    }
+  });
+
+  app.delete("/api/bosses/:name", async (req, res) => {
+    const bossName = req.params.name;
+    const channelId = (req.query.channel as string) || "default";
+    const gameId = req.query.game as string;
+    if (!gameId) return res.status(400).json({ error: "Game ID is required" });
+    try {
+      await storage.deleteBoss(channelId, gameId, bossName);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete boss" });
     }
   });
 
