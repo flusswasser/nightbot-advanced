@@ -371,6 +371,25 @@ async function initializeBot() {
                 const list = subscriptions.filter(s => s.discordChannelId === message.channelId);
                 await message.reply(list.length ? list.map((s, i) => `${i+1}. **${s.channelName}**`).join('\n') : "No YouTube subs.");
             }
+            else if (command === 'areas') {
+                const areas = [...new Set(nuzlocke.catches.map(c => c.area))];
+                if (areas.length === 0) return message.reply("No areas have been tracked yet.");
+                await message.reply(`**Tracked Areas:**\n${areas.map((a, i) => `${i + 1}. ${a}`).join('\n')}`);
+            }
+            else if (command === 'delete') {
+                const areaToDelete = args.join(' ');
+                if (!areaToDelete) return message.reply("Usage: `!delete <area name>`");
+                
+                const initialCount = nuzlocke.catches.length;
+                nuzlocke.catches = nuzlocke.catches.filter(c => c.area.toLowerCase() !== areaToDelete.toLowerCase());
+                
+                if (nuzlocke.catches.length === initialCount) {
+                    return message.reply(`No data found for area: **${areaToDelete}**`);
+                }
+                
+                saveData();
+                await message.reply(`✓ Cleared all data for area: **${areaToDelete}**`);
+            }
             else if (command === 'latestvideo') {
                 const query = args.join(' ');
                 if (!query) return message.channel.send('Usage: `!latestvideo <channel name>`');
