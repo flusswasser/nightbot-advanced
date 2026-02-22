@@ -633,6 +633,40 @@ async function initializeBot() {
         const removed = subscriptions.splice(index, 1)[0];
         saveSubscriptions();
         await message.reply(`✓ Unsubscribed from **${removed.channelName}**`);
+      } else if (command === 'areas') {
+        const nuzlockePath = path.join(process.cwd(), 'nuzlocke.json');
+        if (fs.existsSync(nuzlockePath)) {
+          const nuzlockeData = JSON.parse(fs.readFileSync(nuzlockePath, 'utf-8'));
+          const areas = [...new Set(nuzlockeData.catches.map((c: any) => c.area))];
+          if (areas.length === 0) {
+            await message.reply("No areas have been tracked yet.");
+          } else {
+            await message.reply(`**Tracked Areas:**\n${areas.map((a, i) => `${i + 1}. ${a}`).join('\n')}`);
+          }
+        } else {
+          await message.reply("No Nuzlocke data found.");
+        }
+      } else if (command === 'delete') {
+        const areaToDelete = args.join(' ');
+        if (!areaToDelete) {
+          await message.reply("Usage: `!delete <area name>`");
+          return;
+        }
+        const nuzlockePath = path.join(process.cwd(), 'nuzlocke.json');
+        if (fs.existsSync(nuzlockePath)) {
+          const nuzlockeData = JSON.parse(fs.readFileSync(nuzlockePath, 'utf-8'));
+          const initialCount = nuzlockeData.catches.length;
+          nuzlockeData.catches = nuzlockeData.catches.filter((c: any) => c.area.toLowerCase() !== areaToDelete.toLowerCase());
+          
+          if (nuzlockeData.catches.length === initialCount) {
+            await message.reply(`No data found for area: **${areaToDelete}**`);
+          } else {
+            fs.writeFileSync(nuzlockePath, JSON.stringify(nuzlockeData, null, 2), 'utf-8');
+            await message.reply(`✓ Cleared all data for area: **${areaToDelete}**`);
+          }
+        } else {
+          await message.reply("No Nuzlocke data found.");
+        }
       } else if (command === 'tauth') {
         if (!TWITCH_CLIENT_ID) {
           await message.reply('❌ Twitch integration not configured.');
